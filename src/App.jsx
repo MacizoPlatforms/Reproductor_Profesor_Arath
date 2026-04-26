@@ -127,28 +127,43 @@ function App() {
   }
 
   const executeSearch = async (isVulnerable) => {
+    // Limpiamos la lista para que el cambio sea evidente
+    setPlaylist([])
+    
     const functionName = isVulnerable ? 'buscar_pistas_vulnerable' : 'buscar_pistas_seguro'
     
+    // Simulación de la query para la clase
+    const querySimulada = isVulnerable 
+      ? `SELECT * FROM tracks WHERE title = '${searchTerm}'`
+      : `SELECT * FROM tracks WHERE title = $1; -- Param: ${searchTerm}`
+    
+    console.log("Ejecutando:", querySimulada)
+
     const { data, error } = await supabase.rpc(functionName, { 
       nombre_pista: searchTerm 
     })
 
     if (error) {
       console.error("Search Error:", error)
+      alert("Error en la consulta. Posible sintaxis SQL rota (¡Éxito en el ataque!)")
       return
     }
 
     if (data && data.length > 0) {
       setPlaylist(data)
       setCurrentTrackIndex(0)
-      changeTrack(0, data)
     } else {
-      alert("No se encontraron resultados")
+      setPlaylist([])
+      alert("0 resultados encontrados (El sistema bloqueó la inyección o no hay coincidencias)")
     }
   }
 
   if (isLoading) {
-    return <div className="loading">Cargando reproductor...</div>
+    return (
+      <div className="loading-container">
+        <div className="animate-pulse-soft">Cargando Arath Player...</div>
+      </div>
+    )
   }
 
   return (
@@ -164,7 +179,7 @@ function App() {
             <Search size={18} className="search-icon" />
             <input 
               type="text" 
-              placeholder="Buscar canción..." 
+              placeholder="Escribe: ' OR '1'='1" 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="search-input"
@@ -173,17 +188,22 @@ function App() {
           <div className="search-actions">
             <button onClick={() => executeSearch(true)} className="btn-vuln">
               <ShieldAlert size={16} />
-              Modo Vulnerable
+              Probar Vulnerable
             </button>
             <button onClick={() => executeSearch(false)} className="btn-secure">
               <Shield size={16} />
-              Modo Seguro
+              Probar Seguro
             </button>
           </div>
         </div>
-        <p className="lab-hint">
-          Prueba inyectando: <code>' OR '1'='1</code> en el modo vulnerable.
-        </p>
+        <div className="lab-footer">
+          <p className="lab-hint">
+            <b>Resultados:</b> {playlist.length} canciones encontradas.
+          </p>
+          <button className="text-muted btn-reset" onClick={() => window.location.reload()}>
+            Reiniciar Todo
+          </button>
+        </div>
       </div>
 
       <div className="player-container">
@@ -339,21 +359,28 @@ function App() {
         .btn-secure:hover {
           background: #16a34a;
         }
-        .lab-hint {
+        .lab-footer {
           margin-top: 1rem;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        .lab-hint {
           font-size: 0.8rem;
           color: var(--text-muted);
         }
-        .lab-hint code {
-          background: rgba(0,0,0,0.3);
-          padding: 2px 6px;
-          border-radius: 4px;
-          color: #ef4444;
+        .btn-reset {
+          font-size: 0.75rem;
+          text-decoration: underline;
+          cursor: pointer;
         }
-        .loading {
-          color: white;
-          font-size: 1.2rem;
-          font-weight: 600;
+        .loading-container {
+          height: 100vh;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          font-size: 1.5rem;
+          font-weight: 700;
         }
         .player-container {
           display: flex;
