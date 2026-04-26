@@ -24,6 +24,7 @@ function App() {
         .from('tracks')
         .select('*')
         .order('id', { ascending: true })
+        .limit(1)
 
       if (data && data.length > 0) {
         setPlaylist(data)
