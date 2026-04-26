@@ -126,9 +126,11 @@ function App() {
     setTimeout(() => changeTrack(firstNewTrackIndex, updatedPlaylist), 0)
   }
 
+  const [hasSearched, setHasSearched] = useState(false)
+  
   const executeSearch = async (isVulnerable) => {
-    // Limpiamos la lista para que el cambio sea evidente
     setPlaylist([])
+    setHasSearched(true)
     
     const functionName = isVulnerable ? 'buscar_pistas_vulnerable' : 'buscar_pistas_seguro'
     
@@ -197,9 +199,11 @@ function App() {
           </div>
         </div>
         <div className="lab-footer">
-          <p className="lab-hint">
-            <b>Resultados:</b> {playlist.length} canciones encontradas.
-          </p>
+          {hasSearched && (
+            <p className="lab-hint">
+              <b>Resultados:</b> {playlist.length} canciones encontradas.
+            </p>
+          )}
           <button className="text-muted btn-reset" onClick={() => window.location.reload()}>
             Reiniciar Todo
           </button>
