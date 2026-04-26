@@ -1,45 +1,43 @@
 import { useState, useRef, useEffect } from 'react'
-import { Play, Pause, SkipForward, SkipBack, Volume2, Music, List, Heart } from 'lucide-react'
-
-const tracks = [
-  {
-    id: 1,
-    title: "Midnight City",
-    artist: "M83",
-    cover: "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?q=80&w=1000&auto=format&fit=crop",
-    duration: "4:03",
-    src: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
-  },
-  {
-    id: 2,
-    title: "Starboy",
-    artist: "The Weeknd",
-    cover: "https://images.unsplash.com/photo-1493225255756-d9584f8606e9?q=80&w=1000&auto=format&fit=crop",
-    duration: "3:50",
-    src: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3"
-  },
-  {
-    id: 3,
-    title: "Blinding Lights",
-    artist: "The Weeknd",
-    cover: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=1000&auto=format&fit=crop",
-    duration: "3:20",
-    src: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3"
-  }
-]
+import { Play, Pause, SkipForward, SkipBack, Volume2, Music, List, Heart, Search, Shield, ShieldAlert } from 'lucide-react'
+import { supabase } from './lib/supabase'
 
 function App() {
-  const [playlist, setPlaylist] = useState(tracks)
+  const [playlist, setPlaylist] = useState([])
   const [currentTrackIndex, setCurrentTrackIndex] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [progress, setProgress] = useState(0)
   const [volume, setVolume] = useState(0.7)
-  const audioRef = useRef(new Audio(playlist[0].src))
+  const [searchTerm, setSearchTerm] = useState("")
+  const [isLoading, setIsLoading] = useState(true)
+  
+  const audioRef = useRef(null)
   const fileInputRef = useRef(null)
 
   const currentTrack = playlist[currentTrackIndex]
 
+  // Fetch initial tracks from Supabase
   useEffect(() => {
+    const fetchTracks = async () => {
+      setIsLoading(true)
+      const { data, error } = await supabase
+        .from('tracks')
+        .select('*')
+        .order('id', { ascending: true })
+
+      if (data && data.length > 0) {
+        setPlaylist(data)
+        audioRef.current = new Audio(data[0].src)
+      }
+      setIsLoading(false)
+    }
+
+    fetchTracks()
+  }, [])
+
+  useEffect(() => {
+    if (!audioRef.current || !currentTrack) return
+
     const audio = audioRef.current
     audio.volume = volume
 
@@ -61,6 +59,7 @@ function App() {
   }, [currentTrackIndex, volume, playlist])
 
   const togglePlay = () => {
+    if (!audioRef.current) return
     if (isPlaying) {
       audioRef.current.pause()
     } else {
@@ -80,14 +79,14 @@ function App() {
   }
 
   const changeTrack = (index, currentPlaylist = playlist) => {
-    audioRef.current.pause()
-    setCurrentTrackIndex(index)
+    if (audioRef.current) audioRef.current.pause()
     
+    setCurrentTrackIndex(index)
     const trackToPlay = currentPlaylist[index]
+    
     audioRef.current = new Audio(trackToPlay.src)
     audioRef.current.volume = volume
     
-    // Auto-play
     audioRef.current.play()
       .then(() => setIsPlaying(true))
       .catch(e => console.error("Error playing audio:", e))
@@ -96,7 +95,7 @@ function App() {
   const handleProgressChange = (e) => {
     const newProgress = e.target.value
     setProgress(newProgress)
-    if (audioRef.current.duration) {
+    if (audioRef.current && audioRef.current.duration) {
       audioRef.current.currentTime = (newProgress / 100) * audioRef.current.duration
     }
   }
@@ -104,7 +103,7 @@ function App() {
   const handleVolumeChange = (e) => {
     const newVolume = e.target.value
     setVolume(newVolume)
-    audioRef.current.volume = newVolume
+    if (audioRef.current) audioRef.current.volume = newVolume
   }
 
   const handleFileUpload = (e) => {
@@ -113,7 +112,7 @@ function App() {
 
     const newTracks = files.map((file, index) => ({
       id: Date.now() + index,
-      title: file.name.replace(/\.[^/.]+$/, ""), // Remove extension
+      title: file.name.replace(/\.[^/.]+$/, ""),
       artist: "Archivo Local",
       cover: "https://images.unsplash.com/photo-1459749411177-042180ce673c?q=80&w=1000&auto=format&fit=crop",
       duration: "Local",
@@ -121,88 +120,241 @@ function App() {
     }))
     
     const updatedPlaylist = [...playlist, ...newTracks]
-    const firstNewTrackIndex = playlist.length // Index of the first new track
+    const firstNewTrackIndex = playlist.length
     
     setPlaylist(updatedPlaylist)
-    
-    // Switch to the first uploaded track and play it
-    setTimeout(() => {
-      changeTrack(firstNewTrackIndex, updatedPlaylist)
-    }, 0)
+    setTimeout(() => changeTrack(firstNewTrackIndex, updatedPlaylist), 0)
   }
 
+  const executeSearch = async (isVulnerable) => {
+    const functionName = isVulnerable ? 'buscar_pistas_vulnerable' : 'buscar_pistas_seguro'
+    
+    const { data, error } = await supabase.rpc(functionName, { 
+      nombre_pista: searchTerm 
+    })
+
+    if (error) {
+      console.error("Search Error:", error)
+      return
+    }
+
+    if (data && data.length > 0) {
+      setPlaylist(data)
+      setCurrentTrackIndex(0)
+      changeTrack(0, data)
+    } else {
+      alert("No se encontraron resultados")
+    }
+  }
+
+  if (isLoading) {
+    return <div className="loading">Cargando reproductor...</div>
+  }
 
   return (
-    <div className="player-container">
-      <div className="glass main-card">
-        <div className="header">
-          <button onClick={() => fileInputRef.current.click()} title="Subir música">
-            <Music size={20} className="text-muted hover-primary" />
-          </button>
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            onChange={handleFileUpload} 
-            accept="audio/*" 
-            multiple 
-            style={{ display: 'none' }} 
-          />
-          <span className="brand">ARATH PLAYER</span>
-          <button onClick={() => console.log("Playlist clicked")}>
-            <List size={20} className="text-muted hover-primary" />
-          </button>
+    <div className="app-layout">
+      {/* Security Lab Section */}
+      <div className="glass security-lab">
+        <div className="lab-header">
+          <Shield size={18} />
+          <span>LABORATORIO DE SEGURIDAD (SQL INJECTION)</span>
         </div>
-
-        <div className="album-container animate-float">
-          <img src={currentTrack.cover} alt={currentTrack.title} className="album-art" />
-        </div>
-
-        <div className="track-info">
-          <div className="track-details">
-            <h1>{currentTrack.title}</h1>
-            <p className="text-muted">{currentTrack.artist}</p>
+        <div className="search-container">
+          <div className="input-wrapper">
+            <Search size={18} className="search-icon" />
+            <input 
+              type="text" 
+              placeholder="Buscar canción..." 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="search-input"
+            />
           </div>
-          <Heart size={24} className="heart-icon" />
-        </div>
-
-        <div className="progress-section">
-          <input 
-            type="range" 
-            min="0" 
-            max="100" 
-            value={progress || 0} 
-            onChange={handleProgressChange}
-            className="progress-bar"
-          />
-          <div className="time-info text-muted">
-            <span>0:00</span>
-            <span>{currentTrack.duration}</span>
+          <div className="search-actions">
+            <button onClick={() => executeSearch(true)} className="btn-vuln">
+              <ShieldAlert size={16} />
+              Modo Vulnerable
+            </button>
+            <button onClick={() => executeSearch(false)} className="btn-secure">
+              <Shield size={16} />
+              Modo Seguro
+            </button>
           </div>
         </div>
+        <p className="lab-hint">
+          Prueba inyectando: <code>' OR '1'='1</code> en el modo vulnerable.
+        </p>
+      </div>
 
-        <div className="controls">
-          <button onClick={prevTrack}><SkipBack size={32} fill="white" /></button>
-          <button onClick={togglePlay} className="play-btn">
-            {isPlaying ? <Pause size={40} fill="white" /> : <Play size={40} fill="white" />}
-          </button>
-          <button onClick={nextTrack}><SkipForward size={32} fill="white" /></button>
-        </div>
+      <div className="player-container">
+        <div className="glass main-card">
+          <div className="header">
+            <button onClick={() => fileInputRef.current.click()} title="Subir música">
+              <Music size={20} className="text-muted hover-primary" />
+            </button>
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              onChange={handleFileUpload} 
+              accept="audio/*" 
+              multiple 
+              style={{ display: 'none' }} 
+            />
+            <span className="brand">ARATH PLAYER</span>
+            <button onClick={() => window.location.reload()}>
+              <List size={20} className="text-muted hover-primary" />
+            </button>
+          </div>
 
-        <div className="volume-section">
-          <Volume2 size={20} className="text-muted" />
-          <input 
-            type="range" 
-            min="0" 
-            max="1" 
-            step="0.01"
-            value={volume} 
-            onChange={handleVolumeChange}
-            className="volume-bar"
-          />
+          <div className="album-container animate-float">
+            <img src={currentTrack?.cover} alt={currentTrack?.title} className="album-art" />
+          </div>
+
+          <div className="track-info">
+            <div className="track-details">
+              <h1>{currentTrack?.title || "Sin título"}</h1>
+              <p className="text-muted">{currentTrack?.artist || "Artista desconocido"}</p>
+            </div>
+            <Heart size={24} className="heart-icon" />
+          </div>
+
+          <div className="progress-section">
+            <input 
+              type="range" 
+              min="0" 
+              max="100" 
+              value={progress || 0} 
+              onChange={handleProgressChange}
+              className="progress-bar"
+            />
+            <div className="time-info text-muted">
+              <span>0:00</span>
+              <span>{currentTrack?.duration || "0:00"}</span>
+            </div>
+          </div>
+
+          <div className="controls">
+            <button onClick={prevTrack}><SkipBack size={32} fill="white" /></button>
+            <button onClick={togglePlay} className="play-btn">
+              {isPlaying ? <Pause size={40} fill="white" /> : <Play size={40} fill="white" />}
+            </button>
+            <button onClick={nextTrack}><SkipForward size={32} fill="white" /></button>
+          </div>
+
+          <div className="volume-section">
+            <Volume2 size={20} className="text-muted" />
+            <input 
+              type="range" 
+              min="0" 
+              max="1" 
+              step="0.01"
+              value={volume} 
+              onChange={handleVolumeChange}
+              className="volume-bar"
+            />
+          </div>
         </div>
       </div>
 
       <style dangerouslySetInnerHTML={{ __html: `
+        .app-layout {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 2rem;
+          width: 100%;
+        }
+        .security-lab {
+          width: 100%;
+          max-width: 500px;
+          padding: 1.5rem;
+          text-align: left;
+          border-bottom: 3px solid #ef4444;
+        }
+        .lab-header {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          font-weight: 800;
+          font-size: 0.75rem;
+          color: #ef4444;
+          margin-bottom: 1rem;
+          letter-spacing: 1px;
+        }
+        .search-container {
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+        }
+        .input-wrapper {
+          position: relative;
+          display: flex;
+          align-items: center;
+        }
+        .search-icon {
+          position: absolute;
+          left: 12px;
+          color: var(--text-muted);
+        }
+        .search-input {
+          width: 100%;
+          background: rgba(255,255,255,0.05);
+          border: 1px solid rgba(255,255,255,0.1);
+          padding: 12px 12px 12px 40px;
+          border-radius: 12px;
+          color: white;
+          outline: none;
+          transition: all 0.3s;
+        }
+        .search-input:focus {
+          border-color: var(--primary);
+          background: rgba(255,255,255,0.1);
+        }
+        .search-actions {
+          display: flex;
+          gap: 10px;
+        }
+        .btn-vuln, .btn-secure {
+          flex: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          padding: 10px;
+          border-radius: 10px;
+          font-size: 0.85rem;
+          font-weight: 600;
+        }
+        .btn-vuln {
+          background: #ef4444;
+          color: white;
+        }
+        .btn-vuln:hover {
+          background: #dc2626;
+        }
+        .btn-secure {
+          background: #22c55e;
+          color: white;
+        }
+        .btn-secure:hover {
+          background: #16a34a;
+        }
+        .lab-hint {
+          margin-top: 1rem;
+          font-size: 0.8rem;
+          color: var(--text-muted);
+        }
+        .lab-hint code {
+          background: rgba(0,0,0,0.3);
+          padding: 2px 6px;
+          border-radius: 4px;
+          color: #ef4444;
+        }
+        .loading {
+          color: white;
+          font-size: 1.2rem;
+          font-weight: 600;
+        }
         .player-container {
           display: flex;
           justify-content: center;
@@ -249,6 +401,10 @@ function App() {
           margin: 0;
           font-size: 1.5rem;
           font-weight: 700;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          max-width: 250px;
         }
         .track-details p {
           margin: 4px 0 0;
@@ -336,3 +492,4 @@ function App() {
 }
 
 export default App
+
