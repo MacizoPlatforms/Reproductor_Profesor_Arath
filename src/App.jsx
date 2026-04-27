@@ -128,6 +128,8 @@ function App() {
   }
 
   const [hasSearched, setHasSearched] = useState(false)
+  const [jsCode, setJsCode] = useState("")
+  const [jsResult, setJsResult] = useState("")
   
   const executeSearch = async (isVulnerable) => {
     setPlaylist([])
@@ -135,13 +137,6 @@ function App() {
     
     const functionName = isVulnerable ? 'buscar_pistas_vulnerable' : 'buscar_pistas_seguro'
     
-    // Simulación de la query para la clase
-    const querySimulada = isVulnerable 
-      ? `SELECT * FROM tracks WHERE title = '${searchTerm}'`
-      : `SELECT * FROM tracks WHERE title = $1; -- Param: ${searchTerm}`
-    
-    console.log("Ejecutando:", querySimulada)
-
     const { data, error } = await supabase.rpc(functionName, { 
       nombre_pista: searchTerm 
     })
@@ -161,6 +156,16 @@ function App() {
     }
   }
 
+  const executeEval = () => {
+    try {
+      // Esta es la línea que herramientas como njsscan marcarían como ERROR CRÍTICO
+      const output = eval(jsCode)
+      setJsResult(String(output))
+    } catch (e) {
+      setJsResult("⚠️ Error: " + e.message)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="loading-container">
@@ -175,36 +180,65 @@ function App() {
       <div className="glass security-lab">
         <div className="lab-header">
           <Shield size={18} />
-          <span>LABORATORIO DE SEGURIDAD (SQL INJECTION)</span>
+          <span>LABORATORIO DE SEGURIDAD (SQL & CODE INJECTION)</span>
         </div>
-        <div className="search-container">
-          <div className="input-wrapper">
-            <Search size={18} className="search-icon" />
-            <input 
-              type="text" 
-              placeholder="Escribe: ' OR '1'='1" 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="search-input"
-            />
+
+        {/* SQL INJECTION DEMO */}
+        <div className="lab-section">
+          <p className="section-title">1. SQL Injection (Database)</p>
+          <div className="search-container">
+            <div className="input-wrapper">
+              <Search size={18} className="search-icon" />
+              <input 
+                type="text" 
+                placeholder="Escribe: ' OR '1'='1" 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="search-input"
+              />
+            </div>
+            <div className="search-actions">
+              <button onClick={() => executeSearch(true)} className="btn-vuln">
+                Probar SQL Vulnerable
+              </button>
+              <button onClick={() => executeSearch(false)} className="btn-secure">
+                Probar SQL Seguro
+              </button>
+            </div>
           </div>
-          <div className="search-actions">
-            <button onClick={() => executeSearch(true)} className="btn-vuln">
-              <ShieldAlert size={16} />
-              Probar Vulnerable
-            </button>
-            <button onClick={() => executeSearch(false)} className="btn-secure">
-              <Shield size={16} />
-              Probar Seguro
-            </button>
-          </div>
-        </div>
-        <div className="lab-footer">
           {hasSearched && (
-            <p className="lab-hint">
-              <b>Resultados:</b> {playlist.length} canciones encontradas.
-            </p>
+            <p className="lab-hint"><b>Resultados:</b> {playlist.length} canciones.</p>
           )}
+        </div>
+
+        <div className="divider"></div>
+
+        {/* CODE INJECTION DEMO (EVAL) */}
+        <div className="lab-section">
+          <p className="section-title">2. Code Injection (JavaScript eval)</p>
+          <div className="search-container">
+            <div className="input-wrapper">
+              <input 
+                type="text" 
+                placeholder="Prueba: alert('Hackeado!') o 2+2" 
+                value={jsCode}
+                onChange={(e) => setJsCode(e.target.value)}
+                className="search-input code-font"
+              />
+            </div>
+            <button onClick={executeEval} className="btn-vuln full-width">
+              Ejecutar Código (Vulnerable)
+            </button>
+            {jsResult && (
+              <div className="eval-result">
+                <b>Salida:</b> <code>{jsResult}</code>
+              </div>
+            )}
+          </div>
+          <p className="lab-hint">Njsscan detectaría el uso de <code>eval()</code> aquí.</p>
+        </div>
+
+        <div className="lab-footer">
           <button className="text-muted btn-reset" onClick={() => window.location.reload()}>
             Reiniciar Todo
           </button>
@@ -303,8 +337,39 @@ function App() {
           font-weight: 800;
           font-size: 0.75rem;
           color: #ef4444;
-          margin-bottom: 1rem;
+          margin-bottom: 1.5rem;
           letter-spacing: 1px;
+        }
+        .lab-section {
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+        }
+        .section-title {
+          font-size: 0.85rem;
+          font-weight: 700;
+          color: white;
+          margin: 0;
+        }
+        .divider {
+          height: 1px;
+          background: rgba(255,255,255,0.1);
+          margin: 1.5rem 0;
+        }
+        .code-font {
+          font-family: 'Courier New', Courier, monospace;
+          font-size: 0.8rem;
+        }
+        .full-width {
+          width: 100%;
+        }
+        .eval-result {
+          background: rgba(0,0,0,0.4);
+          padding: 10px;
+          border-radius: 8px;
+          font-size: 0.8rem;
+          text-align: left;
+          border-left: 3px solid #ef4444;
         }
         .search-container {
           display: flex;
